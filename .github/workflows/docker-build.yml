@@ -18,9 +18,9 @@ on:
       - main
     paths-ignore: *not-in-image
   schedule:
-    # Weekly check for a new Beeper Desktop release: Mondays 03:17 Hong Kong time
+    # Weekly check for a new Beeper Desktop release: Mondays 00:17 Hong Kong time
     # (cron is UTC). Off the hour because GitHub delays top-of-the-hour schedules.
-    - cron: '17 19 * * 0'
+    - cron: '17 16 * * 0'
   workflow_dispatch:
 
 env:
