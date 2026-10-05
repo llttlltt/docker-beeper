@@ -1,14 +1,11 @@
 FROM ghcr.io/linuxserver/baseimage-selkies:debiantrixie
 
-# Beeper Desktop version to install, e.g. 4.3.160. Empty installs the latest stable release.
-ARG BEEPER_VERSION=""
-ARG TARGETARCH
-
 LABEL maintainer="zachatrocity"
 
 # title
 ENV TITLE=Beeper
 
+# System packages, in their own layer so a Beeper update does not re-download them
 RUN \
   echo "**** add icon ****" && \
   curl -o \
@@ -27,8 +24,23 @@ RUN \
     libnss3 \
     python3-xdg \
     wmctrl && \
-  cd /tmp && \
+  echo "**** cleanup ****" && \
+  apt-get autoclean && \
+  rm -rf \
+    /config/.cache \
+    /config/.launchpadlib \
+    /var/lib/apt/lists/* \
+    /var/tmp/* \
+    /tmp/*
+
+# Beeper Desktop version to install, e.g. 4.3.160. Empty installs the latest stable release.
+# Declared here, after the package layer, so a new version only rebuilds the Beeper layer.
+ARG BEEPER_VERSION=""
+ARG TARGETARCH
+
+RUN \
   echo "**** install beeper ****" && \
+  cd /tmp && \
   case "${TARGETARCH:-amd64}" in \
     amd64) API_ARCH=x64; FILE_ARCH=x86_64 ;; \
     arm64) API_ARCH=arm64; FILE_ARCH=arm64 ;; \
@@ -52,14 +64,7 @@ RUN \
   cp \
     /opt/beeper/beepertexts.png \
     /usr/share/icons/hicolor/512x512/apps/beeper.png && \
-  echo "**** cleanup ****" && \
-  apt-get autoclean && \
-  rm -rf \
-    /config/.cache \
-    /config/.launchpadlib \
-    /var/lib/apt/lists/* \
-    /var/tmp/* \
-    /tmp/*
+  rm -rf /tmp/*
 
 # Hardened defaults: no sudo or terminals in the desktop, no file transfers or remote
 # commands over the stream, and the stream only accepts same-origin browser connections.
@@ -77,6 +82,10 @@ ENV CUSTOM_USER=beeper \
 
 # add local files
 COPY /root /
+
+# Healthy while Beeper's API answers (401 without a token); the watchdog restarts Beeper otherwise
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+  CMD test "$(curl -s -o /dev/null -m 8 -w '%{http_code}' http://127.0.0.1:23373/v0/mcp)" != "000"
 
 # ports and volumes
 EXPOSE 3000

@@ -72,6 +72,8 @@ Beeper runs with software rendering in a single renderer process to keep memory 
 
 A watchdog keeps Beeper healthy without restarting the container: it restarts Beeper when the container's memory stays above `BEEPER_MEMORY_LIMIT_MB` (default `1500`) for `BEEPER_WATCHDOG_STRIKES` checks (default `5`, one every `BEEPER_WATCHDOG_INTERVAL` seconds, default `60`), or when its API stops answering. Set `BEEPER_RESTART_AT=04:00` to also restart Beeper daily at that time (container timezone, `TZ`). Pair it with a container memory limit a few hundred MB higher as a backstop.
 
+The container's health check reports unhealthy while Beeper's API stops answering, so orchestrators such as TrueNAS show its state. Beeper is installed in its own image layer, so updating to a new Beeper version only downloads that layer.
+
 ## Application Setup
 
 The application can be accessed at:
