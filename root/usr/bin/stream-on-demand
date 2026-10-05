@@ -1,0 +1,51 @@
+#!/bin/bash
+# Run the selkies stream only while someone is viewing the web desktop.
+# Starts svc-selkies when nginx serves an authenticated request, and stops it once
+# no client has been connected to the stream for STREAM_IDLE_TIMEOUT seconds.
+
+SERVICE=/run/service/svc-selkies
+ACCESS_LOG=/var/log/nginx/access.log
+STREAM_PORT=8082
+IDLE_TIMEOUT=${STREAM_IDLE_TIMEOUT:-300}
+POLL=2
+
+stream_running() {
+  s6-svstat -o up "$SERVICE" 2>/dev/null | grep -q true
+}
+
+stream_clients() {
+  ss -Htn state established "( sport = :${STREAM_PORT} )" 2>/dev/null | wc -l
+}
+
+until [ -f "$ACCESS_LOG" ]; do sleep 1; done
+log_offset=$(stat -c %s "$ACCESS_LOG")
+idle_since=$(date +%s)
+
+while true; do
+  now=$(date +%s)
+  log_size=$(stat -c %s "$ACCESS_LOG" 2>/dev/null || echo 0)
+  [ "$log_size" -lt "$log_offset" ] && log_offset=0
+
+  if [ "$log_size" -gt "$log_offset" ]; then
+    # Status is the 9th field of the combined log format; 401 means the password was not given.
+    if tail -c +$((log_offset + 1)) "$ACCESS_LOG" | awk '$9 != 401 { found = 1 } END { exit !found }'; then
+      idle_since=$now
+      if ! stream_running; then
+        echo "[stream-on-demand] viewer arrived, starting stream"
+        s6-svc -u "$SERVICE"
+      fi
+    fi
+    log_offset=$log_size
+  fi
+
+  if stream_running; then
+    if [ "$(stream_clients)" -gt 0 ]; then
+      idle_since=$now
+    elif [ $((now - idle_since)) -ge "$IDLE_TIMEOUT" ]; then
+      echo "[stream-on-demand] no viewers for ${IDLE_TIMEOUT}s, stopping stream"
+      s6-svc -d "$SERVICE"
+    fi
+  fi
+
+  sleep "$POLL"
+done

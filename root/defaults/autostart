@@ -11,4 +11,14 @@ elif [ "${DARK_MODE}" != "true" ] && [ -f "$HOME/.config/gtk-3.0/settings.ini" ]
 fi
 
 export APPDIR='/opt/beeper'
-/opt/beeper/AppRun --no-sandbox --disable-gpu
+# Software rendering: keep the GPU work in the main process and use one renderer to save memory
+/opt/beeper/AppRun --no-sandbox --disable-gpu --in-process-gpu --renderer-process-limit=1 \
+  --disable-features=SpareRendererForSitePerProcess &
+BEEPER_PID=$!
+
+# Beeper opens its main window at a fixed size, and replaces the fixed-size login window
+# after sign-in; keep its windows maximised so they follow the browser viewport.
+while kill -0 "$BEEPER_PID" 2>/dev/null; do
+  wmctrl -x -r beeper.Beeper -b add,maximized_vert,maximized_horz 2>/dev/null
+  sleep 3
+done

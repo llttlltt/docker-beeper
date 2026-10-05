@@ -19,12 +19,14 @@ RUN \
   apt-get install -y --no-install-recommends \
     chromium \
     chromium-l10n \
+    fonts-liberation2 \
     git \
     libgtk-3-bin \
     libatk1.0 \
     libatk-bridge2.0 \
     libnss3 \
-    python3-xdg && \
+    python3-xdg \
+    wmctrl && \
   cd /tmp && \
   echo "**** install beeper ****" && \
   case "${TARGETARCH:-amd64}" in \

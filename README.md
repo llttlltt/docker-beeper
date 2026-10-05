@@ -53,6 +53,12 @@ To build a specific version locally, pass it as a build argument; without it, th
 docker build --build-arg BEEPER_VERSION=4.3.160 -t docker-beeper .
 ```
 
+## Resource usage
+
+The desktop is streamed only while someone is viewing it: opening the web interface starts the stream, and it stops after `STREAM_IDLE_TIMEOUT` seconds (default `300`) with no viewer. Beeper keeps running throughout, so its API stays available. Set `STREAM_ON_DEMAND=false` to stream continuously.
+
+Beeper runs with software rendering in a single renderer process to keep memory down; expect roughly 1 GB with no viewer.
+
 ## Application Setup
 
 The application can be accessed at:

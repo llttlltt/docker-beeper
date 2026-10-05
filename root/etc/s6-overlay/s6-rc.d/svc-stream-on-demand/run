@@ -1,0 +1,9 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+# Stream the desktop only while it is being viewed; set STREAM_ON_DEMAND=false to stream continuously.
+if [[ "${STREAM_ON_DEMAND,,}" == "false" ]]; then
+    exec sleep infinity
+fi
+
+exec /usr/bin/stream-on-demand
