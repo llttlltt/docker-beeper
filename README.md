@@ -59,6 +59,8 @@ The desktop is streamed only while someone is viewing it: opening the web interf
 
 Beeper runs with software rendering in a single renderer process to keep memory down; expect roughly 1 GB with no viewer.
 
+A watchdog keeps Beeper healthy without restarting the container: it restarts Beeper when the container's memory stays above `BEEPER_MEMORY_LIMIT_MB` (default `1500`) for `BEEPER_WATCHDOG_STRIKES` checks (default `5`, one every `BEEPER_WATCHDOG_INTERVAL` seconds, default `60`), or when its API stops answering. Set `BEEPER_RESTART_AT=04:00` to also restart Beeper daily at that time (container timezone, `TZ`). Pair it with a container memory limit a few hundred MB higher as a backstop.
+
 ## Application Setup
 
 The application can be accessed at:

@@ -1,0 +1,22 @@
+#!/bin/bash
+# Run Beeper for the desktop session: relaunch it whenever it exits (the watchdog restarts
+# Beeper by stopping it), and keep its windows maximised so they follow the browser viewport.
+
+export APPDIR='/opt/beeper'
+
+while true; do
+  # Software rendering: keep the GPU work in the main process and use one renderer to save memory
+  /opt/beeper/AppRun --no-sandbox --disable-gpu --in-process-gpu --renderer-process-limit=1 \
+    --disable-features=SpareRendererForSitePerProcess &
+  beeper_pid=$!
+
+  # Beeper opens its main window at a fixed size, and replaces the fixed-size login window
+  # after sign-in, so re-apply the maximised state while it runs.
+  while kill -0 "$beeper_pid" 2>/dev/null; do
+    wmctrl -x -r beeper.Beeper -b add,maximized_vert,maximized_horz 2>/dev/null
+    sleep 3
+  done
+
+  echo "[beeper-session] Beeper exited, relaunching"
+  sleep 2
+done

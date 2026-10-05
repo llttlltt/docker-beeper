@@ -1,0 +1,91 @@
+#!/bin/bash
+# Keep Beeper healthy without restarting the container. Every BEEPER_WATCHDOG_INTERVAL
+# seconds, restart Beeper when the container's memory stays above BEEPER_MEMORY_LIMIT_MB,
+# when its API stops answering, or at BEEPER_RESTART_AT (HH:MM, optional). beeper-session
+# relaunches Beeper once it exits; if the desktop session itself is gone, restart it.
+
+MEMORY_LIMIT_MB=${BEEPER_MEMORY_LIMIT_MB:-1500}
+INTERVAL=${BEEPER_WATCHDOG_INTERVAL:-60}
+STRIKES_TO_RESTART=${BEEPER_WATCHDOG_STRIKES:-5}
+STARTUP_GRACE=${BEEPER_WATCHDOG_GRACE:-180}
+RESTART_AT=${BEEPER_RESTART_AT:-}
+API_URL=http://127.0.0.1:23373/v0/mcp
+BEEPER_MAIN='^/opt/beeper/beepertexts --no-sandbox'
+
+log() { echo "[beeper-watchdog] $*"; }
+
+# Working set as Docker and TrueNAS report it: usage minus reclaimable page cache.
+memory_mb() {
+  local current inactive
+  current=$(cat /sys/fs/cgroup/memory.current 2>/dev/null) || return 1
+  inactive=$(awk '$1 == "inactive_file" { print $2 }' /sys/fs/cgroup/memory.stat 2>/dev/null)
+  echo $(((current - ${inactive:-0}) / 1048576))
+}
+
+# Any HTTP response (401 without a token) means the API is serving.
+api_answers() {
+  [ "$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$API_URL")" != "000" ]
+}
+
+beeper_running() { pgrep -f "$BEEPER_MAIN" > /dev/null; }
+
+restart_beeper() {
+  log "restarting Beeper: $1"
+  pkill -f "$BEEPER_MAIN"
+  sleep 10
+  pkill -9 -f /opt/beeper/beepertexts 2>/dev/null
+  started_at=$(date +%s)
+  memory_strikes=0
+  api_strikes=0
+}
+
+started_at=$(date +%s)
+memory_strikes=0
+api_strikes=0
+missing_strikes=0
+last_scheduled=""
+log "limit ${MEMORY_LIMIT_MB} MB, interval ${INTERVAL}s, scheduled restart ${RESTART_AT:-off}"
+
+while true; do
+  sleep "$INTERVAL"
+  now=$(date +%s)
+
+  if ! beeper_running; then
+    missing_strikes=$((missing_strikes + 1))
+    if [ "$missing_strikes" -ge 3 ]; then
+      log "Beeper has not been running for $((missing_strikes * INTERVAL))s, restarting the desktop session"
+      s6-svc -r /run/service/svc-de
+      started_at=$now
+      missing_strikes=0
+    fi
+    continue
+  fi
+  missing_strikes=0
+
+  if [ -n "$RESTART_AT" ] && [ "$(date +%H:%M)" = "$RESTART_AT" ] && [ "$last_scheduled" != "$(date +%F)" ]; then
+    last_scheduled=$(date +%F)
+    restart_beeper "scheduled restart at ${RESTART_AT}"
+    continue
+  fi
+
+  [ $((now - started_at)) -lt "$STARTUP_GRACE" ] && continue
+
+  if used=$(memory_mb) && [ "$used" -gt "$MEMORY_LIMIT_MB" ]; then
+    memory_strikes=$((memory_strikes + 1))
+    log "memory ${used} MB above ${MEMORY_LIMIT_MB} MB (${memory_strikes}/${STRIKES_TO_RESTART})"
+    if [ "$memory_strikes" -ge "$STRIKES_TO_RESTART" ]; then
+      restart_beeper "memory ${used} MB above ${MEMORY_LIMIT_MB} MB"
+      continue
+    fi
+  else
+    memory_strikes=0
+  fi
+
+  if api_answers; then
+    api_strikes=0
+  else
+    api_strikes=$((api_strikes + 1))
+    log "API not answering (${api_strikes}/3)"
+    [ "$api_strikes" -ge 3 ] && restart_beeper "API not answering"
+  fi
+done
