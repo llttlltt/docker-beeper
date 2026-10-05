@@ -6,9 +6,17 @@ on:
       - main
     tags:
       - 'v*'
+    # Files that never reach the image; a change to only these skips the build
+    paths-ignore: &not-in-image
+      - '**.md'
+      - LICENSE
+      - .editorconfig
+      - .gitignore
+      - compose.yml
   pull_request:
     branches:
       - main
+    paths-ignore: *not-in-image
   schedule:
     # Weekly check for a new Beeper Desktop release (Mondays 03:17 UTC)
     - cron: '17 3 * * 1'

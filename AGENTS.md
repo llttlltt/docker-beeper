@@ -17,7 +17,7 @@ Beeper Desktop (v4, Linux AppImage) in a LinuxServer.io selkies container, strea
 
 ## Build and test
 
-- CI (`.github/workflows/docker-build.yml`) builds amd64 on push to `main`, on manual dispatch, and weekly; the weekly run skips a Beeper version that is already published.
+- CI (`.github/workflows/docker-build.yml`) builds amd64 on push to `main`, on manual dispatch, and weekly; the weekly run skips a Beeper version that is already published. Pushes that only touch files outside the image (Markdown, `LICENSE`, `compose.yml`, editor and git config) skip the build; extend that `paths-ignore` list when adding such files.
 - Local builds on Apple silicon produce arm64 natively: `docker build -t docker-beeper:test .` (add `--build-arg BEEPER_VERSION=x.y.z` to pin). Beeper keeps only a few old builds; 4.2.269 still downloads for update tests.
 - Test containers on Docker Desktop: use named volumes for `/config`. A bind-mounted folder that was deleted and recreated leaves Docker Desktop with a stale handle, and init fails with "No such file or directory".
 - Verify behaviour end to end, not just the build: login (401 without, 200 with, 429 after repeated failures), streaming on demand (`s6-svstat -o up /run/service/svc-selkies`), watchdog restarts (`docker logs` lines tagged `[beeper-watchdog]`), and the health check (`docker inspect -f '{{.State.Health.Status}}'`).
