@@ -33,13 +33,24 @@ services:
     volumes:
       - /path/to/config:/config
     ports:
-      - 3000:3000
-      - 3001:3001
+      - 127.0.0.1:3001:3001 # HTTPS web desktop; publish only to a network you trust
     devices:
       - /dev/dri:/dev/dri #optional
     shm_size: "1gb"
+    mem_limit: 2g
     restart: unless-stopped
 ```
+
+## Getting started
+
+1. **Start the container** with a persistent `/config` volume, as above.
+2. **Set the web desktop password.** The user is `beeper` (`CUSTOM_USER` changes it). Write a password to `/config/auth/password` and restart; it is hashed (SHA-512 crypt) into `/config/auth/password.hash` and the plaintext file is deleted. To change it, write a new one and restart. Alternatively set `PASSWORD` or `FILE__PASSWORD`, which are hashed on every start and left as they are. Until a password is set the desktop stays locked, and failed logins are rate limited per client address.
+   ```sh
+   docker exec beeper sh -c "printf '%s' 'your-password' > /config/auth/password" && docker restart beeper
+   ```
+3. **Open the web desktop** at `https://yourhost:3001` and sign in. The desktop streams only while the page is open.
+4. **Sign in to Beeper**, verify the new device with your recovery key, and reconnect any networks that link per device (such as Signal).
+5. **Connect an MCP client or API consumer.** Beeper Desktop's API listens inside the container at `http://127.0.0.1:23373` (MCP at `/v0/mcp`). Reach it from a container that shares this one's network namespace (`network_mode: service:beeper`), or enable *Settings → Integrations → Advanced → Remote Access* and publish port 23373 to a trusted network. Create a token under *Settings → Integrations → Approved connections*.
 
 ## Beeper version
 
@@ -72,13 +83,13 @@ The application can be accessed at:
 
 ### Security
 
-This fork ships hardened defaults: `sudo` and terminals are disabled inside the desktop (`DISABLE_SUDO`, `DISABLE_TERMINALS`), file transfers, printing and remote commands over the stream are off, and the stream only accepts same-origin browser connections (`SELKIES_ALLOWED_ORIGINS=""`). Each can be overridden with its environment variable. Always set `PASSWORD`.
+This fork ships hardened defaults: `sudo` and terminals are disabled inside the desktop (`DISABLE_SUDO`, `DISABLE_TERMINALS`), file transfers, printing and remote commands over the stream are off, and the stream only accepts same-origin browser connections (`SELKIES_ALLOWED_ORIGINS=""`). Each can be overridden with its environment variable. The web desktop always has a login: see Getting started.
 
 
 >[!WARNING]
 >Do not put this on the Internet if you do not know what you are doing.
 
-By default this container has no authentication and the optional environment variables `CUSTOM_USER` and `PASSWORD` to enable basic http auth via the embedded NGINX server should only be used to locally secure the container from unwanted access on a local network. If exposing this to the Internet we recommend putting it behind a reverse proxy and ensuring a secure authentication solution is in place. From the web interface a terminal can be launched and it is configured for passwordless sudo, so anyone with access to it can install and run whatever they want along with probing your local network.
+The web desktop's login is HTTP basic auth via the embedded NGINX server, suited to a local network or tailnet. If exposing this to the Internet, put it behind a reverse proxy with a stronger authentication solution.
 
 ### Options in all KasmVNC based GUI containers
 

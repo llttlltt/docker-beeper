@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run the selkies stream only while someone is viewing the web desktop.
-# Starts svc-selkies when nginx serves an authenticated request, and stops it once
+# Starts svc-selkies when nginx serves a successful (authenticated) request, and stops it once
 # no client has been connected to the stream for STREAM_IDLE_TIMEOUT seconds.
 
 SERVICE=/run/service/svc-selkies
@@ -27,8 +27,9 @@ while true; do
   [ "$log_size" -lt "$log_offset" ] && log_offset=0
 
   if [ "$log_size" -gt "$log_offset" ]; then
-    # Status is the 9th field of the combined log format; 401 means the password was not given.
-    if tail -c +$((log_offset + 1)) "$ACCESS_LOG" | awk '$9 != 401 { found = 1 } END { exit !found }'; then
+    # Status is the 9th field of the combined log format; only successful requests count,
+    # so failed or throttled logins (401, 429) never start the stream.
+    if tail -c +$((log_offset + 1)) "$ACCESS_LOG" | awk '$9 ~ /^[23]/ { found = 1 } END { exit !found }'; then
       idle_since=$now
       if ! stream_running; then
         echo "[stream-on-demand] viewer arrived, starting stream"

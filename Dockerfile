@@ -9,18 +9,6 @@ LABEL maintainer="zachatrocity"
 # title
 ENV TITLE=Beeper
 
-# Hardened defaults: no sudo or terminals in the desktop, no file transfers or remote
-# commands over the stream, and the stream only accepts same-origin browser connections.
-# xdg-open stays enabled so Beeper can open sign-in and approval links in Chromium.
-ENV DISABLE_SUDO=true \
-    DISABLE_TERMINALS=true \
-    SELKIES_ALLOWED_ORIGINS="" \
-    SELKIES_FILE_TRANSFERS="" \
-    SELKIES_COMMAND_ENABLED=false \
-    SELKIES_PRINTING_ENABLED=false \
-    SELKIES_UI_SIDEBAR_SHOW_FILES=false \
-    SELKIES_UI_SIDEBAR_SHOW_APPS=false
-
 RUN \
   echo "**** add icon ****" && \
   curl -o \
@@ -72,6 +60,20 @@ RUN \
     /var/lib/apt/lists/* \
     /var/tmp/* \
     /tmp/*
+
+# Hardened defaults: no sudo or terminals in the desktop, no file transfers or remote
+# commands over the stream, and the stream only accepts same-origin browser connections.
+# xdg-open stays enabled so Beeper can open sign-in and approval links in Chromium.
+# The web desktop login is user "beeper" with a password you supply; see init-beeper-auth.
+ENV CUSTOM_USER=beeper \
+    DISABLE_SUDO=true \
+    DISABLE_TERMINALS=true \
+    SELKIES_ALLOWED_ORIGINS="" \
+    SELKIES_FILE_TRANSFERS="" \
+    SELKIES_COMMAND_ENABLED=false \
+    SELKIES_PRINTING_ENABLED=false \
+    SELKIES_UI_SIDEBAR_SHOW_FILES=false \
+    SELKIES_UI_SIDEBAR_SHOW_APPS=false
 
 # add local files
 COPY /root /

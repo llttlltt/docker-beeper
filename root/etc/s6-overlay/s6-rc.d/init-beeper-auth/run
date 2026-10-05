@@ -1,0 +1,58 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+# Web desktop login. Runs after init-nginx and before nginx starts, replacing the base
+# image's optional MD5 basic auth with a mandatory SHA-512 crypt hash:
+#   1. PASSWORD (or FILE__PASSWORD) is hashed on every start; the user manages that secret.
+#   2. Otherwise /config/auth/password, if present, is hashed and then deleted.
+#   3. Otherwise the hash stored by an earlier start is used.
+#   4. Otherwise every login fails until a password is supplied (fail closed).
+# Failed logins are rate limited per client address.
+
+AUTH_DIR=/config/auth
+INBOX="${AUTH_DIR}/password"
+HASH_FILE="${AUTH_DIR}/password.hash"
+HTPASSWD=/etc/nginx/.htpasswd
+NGINX_CONFIG=/etc/nginx/sites-available/default
+LOGIN_USER="${CUSTOM_USER:-beeper}"
+
+mkdir -p "${AUTH_DIR}"
+chown root:root "${AUTH_DIR}"
+chmod 700 "${AUTH_DIR}"
+
+hash_password() {
+    (umask 077 && openssl passwd -6 -stdin > "${HASH_FILE}")
+}
+
+if [[ -n "${PASSWORD}" ]]; then
+    printf '%s' "${PASSWORD}" | hash_password
+    echo "[beeper-auth] web desktop password set from PASSWORD"
+elif [[ -s "${INBOX}" ]]; then
+    tr -d '\r\n' < "${INBOX}" | hash_password
+    rm -f "${INBOX}"
+    echo "[beeper-auth] web desktop password set from ${INBOX}; the plaintext file was removed"
+fi
+
+if [[ -s "${HASH_FILE}" ]]; then
+    printf '%s:%s\n' "${LOGIN_USER}" "$(cat "${HASH_FILE}")" > "${HTPASSWD}"
+else
+    # A crypt field that matches no password: the desktop stays closed until one is set
+    printf '%s:!\n' "${LOGIN_USER}" > "${HTPASSWD}"
+    echo "[beeper-auth] no web desktop password set; the desktop is locked."
+    echo "[beeper-auth] write one to ${INBOX} (or set PASSWORD) and restart the container."
+fi
+# nginx workers run as www-data
+chown root:www-data "${HTPASSWD}"
+chmod 640 "${HTPASSWD}"
+chmod 600 "${HASH_FILE}" 2>/dev/null
+
+# Always require the login, and throttle failed attempts per client address. The failure
+# location answers via try_files rather than return: return runs in the rewrite phase,
+# before limit_req is evaluated.
+sed -i \
+    -e 's|^\(\s*\)#\(auth_basic\)|\1\2|' \
+    -e 's|^\(\s*auth_basic_user_file .*;\)$|\1\n  error_page 401 = @auth_failed;\n  location @auth_failed {\n    limit_req zone=beeper_auth burst=10 nodelay;\n    limit_req_status 429;\n    auth_basic off;\n    add_header WWW-Authenticate '"'"'Basic realm="Login"'"'"' always;\n    try_files /beeper-auth-failed =401;\n  }|' \
+    "${NGINX_CONFIG}"
+cat > /etc/nginx/conf.d/beeper-auth.conf <<'EOF'
+limit_req_zone $binary_remote_addr zone=beeper_auth:1m rate=6r/m;
+EOF

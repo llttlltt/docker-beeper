@@ -6,3 +6,9 @@ lsiown -R abc:abc \
     /config
 lsiown -R abc:abc \
     /opt/beeper
+
+# credentials stay readable by root only (see init-beeper-auth)
+if [[ -d /config/auth ]]; then
+    chown -R root:root /config/auth
+    chmod 700 /config/auth
+fi
