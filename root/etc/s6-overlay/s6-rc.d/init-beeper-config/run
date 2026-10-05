@@ -6,5 +6,3 @@ lsiown -R abc:abc \
     /config
 lsiown -R abc:abc \
     /opt/beeper
-lsiown -R abc:abc \
-    /opt/beeper-legacy

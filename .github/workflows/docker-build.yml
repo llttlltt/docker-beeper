@@ -9,7 +9,10 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch: 
+  schedule:
+    # Weekly check for a new Beeper Desktop release (Mondays 03:17 UTC)
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -26,14 +29,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Resolve latest Beeper Desktop version
+        id: beeper
+        run: |
+          url=$(curl -fsS -o /dev/null -w '%{redirect_url}' \
+            https://api.beeper.com/desktop/download/linux/x64/stable/com.automattic.beeper.desktop)
+          version=$(printf '%s' "$url" | sed -n 's|.*/Beeper-\([0-9.]*\)-x86_64\.AppImage$|\1|p')
+          if [ -z "$version" ]; then
+            echo "Could not resolve the Beeper version from '$url'" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Beeper Desktop $version"
+
+      - name: Skip scheduled build when this version is already published
+        id: existing
+        if: github.event_name == 'schedule'
+        run: |
+          image="${REGISTRY}/${IMAGE_NAME,,}:${{ steps.beeper.outputs.version }}"
+          if docker manifest inspect "$image" > /dev/null 2>&1; then
+            echo "$image already exists"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Docker Buildx
+        if: steps.existing.outputs.skip != 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to the Container registry
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.existing.outputs.skip != 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -41,43 +65,30 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
+        if: steps.existing.outputs.skip != 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
             type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=${{ steps.beeper.outputs.version }},enable=${{ github.event_name != 'pull_request' }}
             type=sha,format=long
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.beeper.outputs.version }}
 
       - name: Build and push amd64 Docker image
+        if: steps.existing.outputs.skip != 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64
-          push: true
+          build-args: |
+            BEEPER_VERSION=${{ steps.beeper.outputs.version }}
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      # ARM64 build is commented out until Beeper supports ARM64 AppImage
-      # - name: Build and push arm64 Docker image
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     context: .
-      #     file: ./Dockerfile.aarch64
-      #     platforms: linux/arm64
-      #     push: ${{ github.event_name != 'pull_request' }}
-      #     tags: ${{ steps.meta.outputs.tags }}-arm64
-      #     labels: ${{ steps.meta.outputs.labels }}
-      #     cache-from: type=gha
-      #     cache-to: type=gha,mode=max
-
-      # The build and push step above already handles tagging and pushing
-      # No additional steps are needed here

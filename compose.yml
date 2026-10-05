@@ -7,7 +7,6 @@ services:
       - PGID=1000
       - TZ=Etc/UTC
       - DARK_MODE=true #optional
-      - USE_LEGACY_BIN=false
     volumes:
       - ./config:/config
     ports:
