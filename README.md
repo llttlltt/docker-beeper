@@ -70,6 +70,9 @@ The application can be accessed at:
 
 ### Security
 
+This fork ships hardened defaults: `sudo` and terminals are disabled inside the desktop (`DISABLE_SUDO`, `DISABLE_TERMINALS`), file transfers, printing and remote commands over the stream are off, and the stream only accepts same-origin browser connections (`SELKIES_ALLOWED_ORIGINS=""`). Each can be overridden with its environment variable. Always set `PASSWORD`.
+
+
 >[!WARNING]
 >Do not put this on the Internet if you do not know what you are doing.
 
